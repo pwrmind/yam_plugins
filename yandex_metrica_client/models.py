@@ -499,9 +499,13 @@ class OfflineConversion:
         
         Returns dict with keys: ClientId, Target, DateTime, Price, Currency
         """
-        # Convert timestamp to Unix epoch (integer seconds) as expected by API
-        import time
-        unix_timestamp = int(time.mktime(self.conversion_time.timetuple()))
+        # Convert timestamp to Unix epoch. Naive datetime трактуется как UTC,
+        # чтобы результат не зависел от TZ сервера.
+        import datetime as _dt
+        ctime = self.conversion_time
+        if ctime.tzinfo is None:
+            ctime = ctime.replace(tzinfo=_dt.timezone.utc)
+        unix_timestamp = int(ctime.timestamp())
         
         data = {
             "ClientId": self.client_id,
