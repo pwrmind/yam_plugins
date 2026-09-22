@@ -57,6 +57,11 @@ from .models import (
     OfflineConversionError,
 )
 
+from .client import (
+    YandexMetricaApiClient,
+    SyncYandexMetricaApiClient,
+)
+
 __version__ = "0.1.0"
 __author__ = "Yandex Metrica Client Team"
 __all__ = [
@@ -106,6 +111,10 @@ __all__ = [
     
     # Main client
     "YandexMetricaClient",
+    
+    # API clients
+    "YandexMetricaApiClient",
+    "SyncYandexMetricaApiClient",
     
     # Exceptions
     "YandexMetricaError",

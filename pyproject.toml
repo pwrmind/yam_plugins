@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "yandex-metrica-client"
+version = "0.1.0"
+description = "Python client for Yandex Metrica API (offline conversions upload)"
+authors = [{ name = "Yandex Metrica Client Team" }]
+readme = "yandex_metrica_client/README.md"
+requires-python = ">=3.8"
+dependencies = [
+    "httpx>=0.27",
+    "requests>=2.31",
+    "pyyaml>=6.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+    "pytest-asyncio>=0.21",
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["yandex_metrica_client*"]
