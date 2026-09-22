@@ -127,6 +127,8 @@ class CounterConfig:
     ecommerce: str = "dataLayer"
     
     def __post_init__(self):
+        # Convert to string if int was passed, then validate
+        self.number = str(self.number)
         if not self.number.isdigit():
             raise ValueError("Counter number must be numeric")
 
@@ -271,39 +273,52 @@ class Order:
     """
     Order entity for purchase tracking.
     
+    Matches Yandex Metrica e-commerce format:
+    {
+      ecommerce: {
+        purchase: {
+          actionField: { id, revenue, coupon, shipping, tax },
+          products: [...]
+        }
+      }
+    }
+    
+    Note: currency should be passed at the EcommerceEvent level, not in actionField.
+    
     Attributes:
         id: Order ID
-        total: Order total amount
-        currency: Currency code
+        total: Order total amount (revenue)
         items: Ordered products
         coupons: Applied coupon codes
         shipping: Shipping cost
         tax: Tax amount
-        customer_id: Customer ID (if available)
-        timestamp: Order timestamp
+        affiliation: Affiliation/store name (optional)
     """
     id: str
     total: float
-    currency: str = "RUB"
     items: List[Product] = field(default_factory=list)
     coupons: List[str] = field(default_factory=list)
     shipping: float = 0.0
     tax: float = 0.0
-    customer_id: Optional[str] = None
-    timestamp: datetime = field(default_factory=datetime.now)
+    affiliation: Optional[str] = None
     
     def to_dict(self) -> Dict[str, Any]:
-        """Convert to dictionary for API request."""
-        return {
+        """
+        Convert to actionField dictionary for Yandex Metrica e-commerce.
+        
+        Returns dict with keys matching Metrica's actionField format:
+        id, revenue, coupon, shipping, tax, affiliation (optional)
+        """
+        data = {
             "id": self.id,
             "revenue": self.total,
-            "currency": self.currency,
             "coupon": ", ".join(self.coupons) if self.coupons else None,
             "shipping": self.shipping,
-            "tax": self.tax,
-            "affiliation": self.customer_id,
-            "timestamp": self.timestamp.isoformat() if self.timestamp else None
+            "tax": self.tax
         }
+        if self.affiliation:
+            data["affiliation"] = self.affiliation
+        return data
 
 
 # =============================================================================
@@ -406,20 +421,25 @@ class TargetEvent(TrackingEvent):
     Target/Goal achievement event.
     
     Attributes:
-        target_name: Target identifier
-        target_type: Target type from TargetType enum
+        target_name: Target identifier (user-defined goal name)
+        target_type: Optional predefined target type from TargetType enum
         value: Numeric value (for revenue targets)
         currency: Currency for value
     """
+    event_type: str = "target"
+    counter_id: str = ""
     target_name: str = ""
-    target_type: Union[TargetType, str] = TargetType.CUSTOM
+    target_type: Optional[Union[TargetType, str]] = None
     value: Optional[float] = None
     currency: str = "RUB"
     
     def __post_init__(self):
-        if isinstance(self.target_type, TargetType):
-            self.target_name = self.target_type.value
-        super().__init__(event_type="target", counter_id="")
+        # Only set target_name from target_type if target_name wasn't explicitly provided
+        if self.target_type is not None and not self.target_name:
+            if isinstance(self.target_type, TargetType):
+                self.target_name = self.target_type.value
+            else:
+                self.target_name = str(self.target_type)
 
 
 @dataclass
@@ -432,12 +452,11 @@ class EcommerceEvent(TrackingEvent):
         products: Products involved in the event
         action_field: Additional action data (order info, etc.)
     """
+    event_type: str = "ecommerce"
+    counter_id: str = ""
     action: EventType = EventType.VIEW_ITEM
     products: List[Product] = field(default_factory=list)
     action_field: Optional[Dict[str, Any]] = None
-    
-    def __post_init__(self):
-        super().__init__(event_type="ecommerce", counter_id="")
     
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for API request."""
@@ -454,39 +473,46 @@ class OfflineConversion:
     """
     Offline conversion data for upload to Yandex Metrica.
     
+    Matches the CSV format required by Yandex Metrica API:
+    ClientId,Target,DateTime,Price,Currency
+    
     Attributes:
-        conversion_id: Unique conversion identifier
+        client_id: Yandex Metrica user ID (_ym_uid cookie) - maps to ClientId
+        target: Goal/target name - maps to Target
+        conversion_time: Conversion timestamp (Unix epoch or ISO) - maps to DateTime
+        revenue: Conversion revenue - maps to Price
+        currency: Currency code - maps to Currency
         click_id: Click ID from Yandex Direct (optional)
-        ym_uid: Yandex Metrica user ID (_ym_uid cookie)
-        conversion_time: Conversion timestamp
-        goal_name: Goal/target name
-        revenue: Conversion revenue (optional)
-        currency: Currency code
         additional_params: Additional conversion parameters
     """
-    conversion_id: str = field(default_factory=lambda: str(uuid.uuid4()))
+    client_id: str  # ClientId in CSV (was ym_uid)
+    target: str  # Target in CSV (was goal_name)
+    conversion_time: datetime = field(default_factory=datetime.now)  # DateTime in CSV
+    revenue: Optional[float] = None  # Price in CSV
+    currency: str = "RUB"  # Currency in CSV
     click_id: Optional[str] = None
-    ym_uid: Optional[str] = None
-    conversion_time: datetime = field(default_factory=datetime.now)
-    goal_name: str = ""
-    revenue: Optional[float] = None
-    currency: str = "RUB"
     additional_params: Dict[str, Any] = field(default_factory=dict)
     
     def to_dict(self) -> Dict[str, Any]:
-        """Convert to dictionary for API upload."""
+        """
+        Convert to dictionary matching CSV column names for API upload.
+        
+        Returns dict with keys: ClientId, Target, DateTime, Price, Currency
+        """
+        # Convert timestamp to Unix epoch (integer seconds) as expected by API
+        import time
+        unix_timestamp = int(time.mktime(self.conversion_time.timetuple()))
+        
         data = {
-            "conversion_id": self.conversion_id,
-            "conversion_time": self.conversion_time.isoformat(),
-            "goal_name": self.goal_name,
-            "currency": self.currency
+            "ClientId": self.client_id,
+            "Target": self.target,
+            "DateTime": unix_timestamp,
+            "Currency": self.currency
         }
+        if self.revenue is not None:
+            data["Price"] = self.revenue
         if self.click_id:
             data["click_id"] = self.click_id
-        if self.ym_uid:
-            data["ym_uid"] = self.ym_uid
-        if self.revenue is not None:
-            data["revenue"] = self.revenue
         if self.additional_params:
             data.update(self.additional_params)
         return data
@@ -611,10 +637,39 @@ class ClientConfig:
     
     def add_counter(
         self, 
-        number: str, 
-        webvisor: bool = True
+        number: Union[str, int], 
+        webvisor: bool = True,
+        clickmap: bool = True,
+        track_links: bool = True,
+        accurate_track_bounce: bool = True,
+        ecommerce: str = "dataLayer"
     ) -> 'ClientConfig':
-        """Add counter configuration."""
+        """
+        Add counter configuration with full options.
+        
+        Args:
+            number: Counter ID (numeric string or int)
+            webvisor: Enable session replay (Webvisor)
+            clickmap: Enable clickmap tracking
+            track_links: Enable link tracking
+            accurate_track_bounce: Enable accurate bounce tracking
+            ecommerce: DataLayer name for e-commerce
+            
+        Returns:
+            Self for fluent interface
+        """
+        self.counters.append(CounterConfig(
+            number=number,
+            webvisor=webvisor,
+            clickmap=clickmap,
+            track_links=track_links,
+            accurate_track_bounce=accurate_track_bounce,
+            ecommerce=ecommerce
+        ))
+        return self
+    
+    def add_counter_simple(self, number: Union[str, int], webvisor: bool = True) -> 'ClientConfig':
+        """Add counter with minimal options (backward compatible)."""
         self.counters.append(CounterConfig(number=number, webvisor=webvisor))
         return self
     
