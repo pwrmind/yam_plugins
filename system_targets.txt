@@ -1,0 +1,37 @@
+# Список всех целей (targets), отправляемых в Яндекс Метрику
+# Все цели имеют префикс "ym-"
+
+# Регистрация и аутентификация
+ym-register
+ym-login
+
+# Контактная информация
+ym-submit-contacts
+ym-confirm-contact
+ym-show-contacts
+ym-contact-constractor
+ym-agree-constractor
+
+# Формы и лиды
+ym-open-leadform
+ym-submit-leadform
+ym-successful-lead
+ym-get-response
+
+# Подписка и коммуникация
+ym-subscribe
+ym-open-chat
+ym-send-message
+
+# E-commerce - взаимодействие с товарами
+ym-add-to-wishlist
+ym-add-to-cart
+
+# E-commerce - процесс оформления заказа
+ym-begin-checkout
+ym-add-payment-info
+ym-purchase
+ym-complete-order
+
+# Встречи и назначения
+ym-agree-meeting
